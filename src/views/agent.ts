@@ -60,17 +60,6 @@ export function agentPage(agent: Agent) {
       animation: fadeIn 0.3s ease-out;
     }
 
-    @keyframes blink {
-      0%, 50% { opacity: 1; }
-      51%, 100% { opacity: 0; }
-    }
-
-    .typing-cursor {
-      animation: blink 1s infinite;
-      color: ${color === 'blue' ? '#60a5fa' : color === 'green' ? '#34d399' : color === 'purple' ? '#a78bfa' : '#fb923c'};
-      font-weight: bold;
-    }
-
     .sidebar-mobile {
       transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
@@ -428,7 +417,7 @@ export function agentPage(agent: Agent) {
       updateAttachmentsPreview();
     }
 
-    // 发送消息（使用流式响应）
+    // 发送消息
     document.getElementById('chat-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const input = document.getElementById('message-input');
@@ -440,11 +429,8 @@ export function agentPage(agent: Agent) {
       addMessage(displayMessage, 'user');
       input.value = '';
 
-      // 创建一个空的助手消息气泡用于打字机效果
-      const assistantBubble = createTypingBubble();
-
       try {
-        const response = await fetch('/api/chat/stream', {
+        const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -455,42 +441,12 @@ export function agentPage(agent: Agent) {
           })
         });
 
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
+        const data = await response.json();
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullContent = '';
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\\n').filter(line => line.startsWith('data: '));
-
-          for (const line of lines) {
-            try {
-              const data = JSON.parse(line.substring(6));
-
-              if (data.chunk) {
-                fullContent += data.chunk;
-                updateTypingBubble(assistantBubble, fullContent);
-              }
-
-              if (data.done) {
-                finalizeTypingBubble(assistantBubble, fullContent);
-              }
-
-              if (data.error) {
-                updateTypingBubble(assistantBubble, \`错误: \${data.error}\`);
-                finalizeTypingBubble(assistantBubble, \`错误: \${data.error}\`);
-              }
-            } catch (e) {
-              console.error('Parse error:', e);
-            }
-          }
+        if (data.error) {
+          addMessage(\`错误: \${data.error}\`, 'assistant');
+        } else if (data.response) {
+          addMessage(data.response, 'assistant');
         }
 
         // 清空附件
@@ -501,73 +457,9 @@ export function agentPage(agent: Agent) {
         await loadSessions();
       } catch (error) {
         console.error('Error:', error);
-        updateTypingBubble(assistantBubble, \`抱歉，发生了错误: \${error.message || '未知错误'}\`);
-        finalizeTypingBubble(assistantBubble, \`抱歉，发生了错误: \${error.message || '未知错误'}\`);
+        addMessage(\`抱歉，发生了错误: \${error.message || '未知错误'}\`, 'assistant');
       }
     });
-
-    // 创建打字中的消息气泡
-    function createTypingBubble() {
-      const messagesDiv = document.getElementById('chat-messages');
-
-      // 移除空状态提示
-      const emptyState = messagesDiv.querySelector('.text-center');
-      if (emptyState) {
-        messagesDiv.innerHTML = '';
-      }
-
-      const messageDiv = document.createElement('div');
-      messageDiv.className = 'flex justify-start message-fade-in';
-
-      const bubble = document.createElement('div');
-      bubble.className = 'max-w-2xl px-4 py-3 rounded-lg glass-effect text-white border border-white/10';
-
-      // 添加打字指示器
-      bubble.innerHTML = '<span class="typing-cursor">▋</span>';
-
-      messageDiv.appendChild(bubble);
-      messagesDiv.appendChild(messageDiv);
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-
-      return bubble;
-    }
-
-    // 更新打字中的消息气泡
-    function updateTypingBubble(bubble, content) {
-      // 使用marked解析markdown
-      bubble.innerHTML = marked.parse(content) + '<span class="typing-cursor">▋</span>';
-
-      // 样式化markdown内容
-      bubble.querySelectorAll('a').forEach(a => {
-        a.className = 'text-${color}-400 hover:text-${color}-300 underline';
-      });
-      bubble.querySelectorAll('code').forEach(code => {
-        code.className = 'bg-black/30 px-1 py-0.5 rounded text-sm';
-      });
-      bubble.querySelectorAll('pre').forEach(pre => {
-        pre.className = 'bg-black/30 p-3 rounded-lg overflow-x-auto my-2';
-      });
-
-      // 滚动到底部
-      const messagesDiv = document.getElementById('chat-messages');
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
-    }
-
-    // 完成打字效果
-    function finalizeTypingBubble(bubble, content) {
-      bubble.innerHTML = marked.parse(content);
-
-      // 样式化markdown内容
-      bubble.querySelectorAll('a').forEach(a => {
-        a.className = 'text-${color}-400 hover:text-${color}-300 underline';
-      });
-      bubble.querySelectorAll('code').forEach(code => {
-        code.className = 'bg-black/30 px-1 py-0.5 rounded text-sm';
-      });
-      bubble.querySelectorAll('pre').forEach(pre => {
-        pre.className = 'bg-black/30 p-3 rounded-lg overflow-x-auto my-2';
-      });
-    }
 
     // 添加消息到聊天界面
     function addMessage(content, role) {
