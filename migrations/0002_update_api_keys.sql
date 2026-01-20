@@ -1,0 +1,2 @@
+-- 更新所有智能体的API密钥（请替换为实际的API密钥）
+-- UPDATE agents SET api_key = 'your_api_key_here' WHERE model = 'perplexity';
